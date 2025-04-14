@@ -2,4 +2,3 @@ streamlit
 cryptography
 requests
 streamlit-lottie
-python-dotenv
