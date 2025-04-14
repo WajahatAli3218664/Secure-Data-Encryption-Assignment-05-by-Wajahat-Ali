@@ -1,5 +1,5 @@
-streamlit==1.32.0
-cryptography==42.0.2
-requests==2.31.0
-streamlit-lottie==0.0.5
-python-dotenv==1.0.0  # Optional for environment variables
+streamlit
+cryptography
+requests
+streamlit-lottie
+python-dotenv
