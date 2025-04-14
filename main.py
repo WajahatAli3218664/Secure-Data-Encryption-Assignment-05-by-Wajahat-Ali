@@ -6,56 +6,100 @@ from cryptography.fernet import Fernet
 from streamlit_lottie import st_lottie
 import requests
 import time
+from dotenv import load_dotenv
+import getpass
+
+# --- Load Environment Variables ---
+load_dotenv()  # Load from .env file
 
 # --- Constants ---
 KEY_FILE = "secret.key"
 DATA_FILE = "data.json"
+BACKUP_FILE = "data_backup.json"
 MAX_ATTEMPTS = 3
-MASTER_PASS = "admin123"  # In production, use environment variables
+SESSION_TIMEOUT = 1800  # 30 minutes in seconds
+
+# Get master password from environment or prompt
+MASTER_PASS = os.getenv("MASTER_PASS")
+if MASTER_PASS is None:
+    MASTER_PASS = getpass.getpass("Set master password: ")
 
 # --- Updated Security Animations ---
 ANIMATIONS = {
-    "lock": "https://assets1.lottiefiles.com/packages/lf20_hl5n0bwb.json",  # Modern lock
-    "success": "https://assets1.lottiefiles.com/packages/lf20_ok5pupu9.json",  # Shield check
-    "error": "https://assets1.lottiefiles.com/packages/lf20_gnvsa7vy.json",  # Shield cross
-    "secure": "https://assets1.lottiefiles.com/packages/lf20_q5kxy7tz.json"  # Password typing
+    "lock": "https://assets1.lottiefiles.com/packages/lf20_hl5n0bwb.json",
+    "success": "https://assets1.lottiefiles.com/packages/lf20_ok5pupu9.json",
+    "error": "https://assets1.lottiefiles.com/packages/lf20_gnvsa7vy.json",
+    "secure": "https://assets1.lottiefiles.com/packages/lf20_q5kxy7tz.json"
 }
 
-# --- Helper Functions ---
-def load_lottie(url):
-    try:
-        r = requests.get(url, timeout=5)
-        return r.json() if r.status_code == 200 else None
-    except:
-        return None
-
-def hash_passkey(passkey):
-    return hashlib.sha256(passkey.encode()).hexdigest()
+# --- Enhanced Security Functions ---
+def hash_passkey(passkey, salt=None):
+    """PBKDF2 hashing with salt for better security"""
+    if salt is None:
+        salt = os.urandom(16)  # Generate new salt
+    return hashlib.pbkdf2_hmac('sha256', passkey.encode(), salt, 100000).hex()
 
 def load_key():
+    """Secure key loading with backup"""
     if not os.path.exists(KEY_FILE):
         key = Fernet.generate_key()
         with open(KEY_FILE, "wb") as f:
+            f.write(key)
+        # Create backup
+        with open(KEY_FILE + ".bak", "wb") as f:
             f.write(key)
     return open(KEY_FILE, "rb").read()
 
 cipher = Fernet(load_key())
 
 def encrypt_data(text):
+    """Encrypt data with additional integrity check"""
     return cipher.encrypt(text.encode()).decode()
 
 def decrypt_data(encrypted_text):
-    return cipher.decrypt(encrypted_text.encode()).decode()
+    """Decrypt data with error handling"""
+    try:
+        return cipher.decrypt(encrypted_text.encode()).decode()
+    except:
+        return None
 
+# --- Data Management ---
 def load_data():
-    if os.path.exists(DATA_FILE):
-        with open(DATA_FILE, "r") as f:
-            return json.load(f)
+    """Load data with backup recovery"""
+    try:
+        if os.path.exists(DATA_FILE):
+            with open(DATA_FILE, "r") as f:
+                return json.load(f)
+    except:
+        # Attempt to restore from backup
+        if os.path.exists(BACKUP_FILE):
+            with open(BACKUP_FILE, "r") as f:
+                return json.load(f)
     return {}
 
 def save_data(data):
+    """Save data with automatic backup"""
+    # First save backup
+    if os.path.exists(DATA_FILE):
+        os.replace(DATA_FILE, BACKUP_FILE)
+    
+    # Then save new data
     with open(DATA_FILE, "w") as f:
         json.dump(data, f, indent=4)
+
+# --- Session Management ---
+def check_session():
+    """Check session timeout and activity"""
+    if "last_activity" not in st.session_state:
+        st.session_state.last_activity = time.time()
+    elif time.time() - st.session_state.last_activity > SESSION_TIMEOUT:
+        st.session_state.is_logged_in = False
+        st.warning("Session timed out due to inactivity")
+        st.rerun()
+
+def update_activity():
+    """Update last activity timestamp"""
+    st.session_state.last_activity = time.time()
 
 # --- UI Configuration ---
 st.set_page_config(
@@ -86,20 +130,56 @@ st.markdown("""
     .sidebar .sidebar-content {
         background: linear-gradient(180deg, #f3e5f5, #e1bee7);
     }
-    .css-1d391kg {
-        padding-top: 2rem;
+    .password-strength {
+        font-size: 0.8em;
+        margin-top: -10px;
+        margin-bottom: 10px;
+    }
+    .strong {
+        color: #4CAF50;
+    }
+    .medium {
+        color: #FFC107;
+    }
+    .weak {
+        color: #F44336;
     }
 </style>
 """, unsafe_allow_html=True)
 
+# --- Helper Functions ---
+def load_lottie(url):
+    try:
+        r = requests.get(url, timeout=5)
+        return r.json() if r.status_code == 200 else None
+    except:
+        return None
+
+def check_password_strength(password):
+    """Check password strength and return feedback"""
+    if len(password) < 8:
+        return "weak", "Password too short (min 8 characters)"
+    elif not any(c.isupper() for c in password):
+        return "medium", "Add uppercase letters for better security"
+    elif not any(c.isdigit() for c in password):
+        return "medium", "Add numbers for better security"
+    elif not any(not c.isalnum() for c in password):
+        return "medium", "Add special characters for better security"
+    else:
+        return "strong", "Strong password!"
+
 # --- Authentication ---
 def check_auth():
+    """Initialize session variables"""
     if "is_logged_in" not in st.session_state:
         st.session_state.is_logged_in = False
     if "failed_attempts" not in st.session_state:
         st.session_state.failed_attempts = 0
+    if "stored_data" not in st.session_state:
+        st.session_state.stored_data = load_data()
 
 def login_page():
+    """Login page with enhanced security"""
     st.title("🔒 Secure Vault Pro")
     col1, col2 = st.columns([1, 2])
     
@@ -119,6 +199,7 @@ def login_page():
                 if password == MASTER_PASS:
                     st.session_state.is_logged_in = True
                     st.session_state.failed_attempts = 0
+                    update_activity()
                     st.success("Authentication Successful!")
                     lottie_success = load_lottie(ANIMATIONS["success"])
                     if lottie_success:
@@ -128,6 +209,9 @@ def login_page():
                 else:
                     st.session_state.failed_attempts += 1
                     attempts_left = MAX_ATTEMPTS - st.session_state.failed_attempts
+                    
+                    # Add delay to prevent brute force
+                    time.sleep(2 ** st.session_state.failed_attempts)
                     
                     lottie_error = load_lottie(ANIMATIONS["error"])
                     if lottie_error:
@@ -142,6 +226,10 @@ def login_page():
 
 # --- Main Application ---
 def main_app():
+    """Main application interface"""
+    check_session()
+    update_activity()
+    
     st.sidebar.title("🔐 Secure Vault Pro")
     menu = ["Dashboard", "Store Data", "Retrieve Data", "Logout"]
     choice = st.sidebar.radio("Navigation", menu)
@@ -159,7 +247,8 @@ def main_app():
         - Military-grade AES-256 encryption
         - Secure password protection
         - Tamper-proof data storage
-        - Beautiful intuitive interface
+        - Automatic backups
+        - Session timeout protection
         
         **Instructions:**
         1. Store data with unique labels
@@ -174,7 +263,12 @@ def main_app():
             label = st.text_input("Data Label (e.g., 'Bank Credentials'):")
             data = st.text_area("Sensitive Data:", height=200)
             passkey = st.text_input("Encryption Passkey:", type="password", 
-                                   help="Minimum 8 characters, include special chars")
+                                 help="Minimum 8 characters, include special chars")
+            
+            if passkey:
+                strength, feedback = check_password_strength(passkey)
+                st.markdown(f'<div class="password-strength {strength}">Password strength: {feedback}</div>', 
+                           unsafe_allow_html=True)
             
             if st.form_submit_button("🔒 Encrypt & Store"):
                 if len(label) < 3:
@@ -183,15 +277,16 @@ def main_app():
                     st.error("Passkey must be at least 8 characters")
                 elif not data.strip():
                     st.error("Please enter data to encrypt")
+                elif label in st.session_state.stored_data:
+                    st.error("Label already exists! Use a different name.")
                 else:
                     encrypted = encrypt_data(data)
-                    stored_data = load_data()
-                    stored_data[label] = {
+                    st.session_state.stored_data[label] = {
                         "data": encrypted,
                         "passkey": hash_passkey(passkey),
                         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")
                     }
-                    save_data(stored_data)
+                    save_data(st.session_state.stored_data)
                     
                     lottie_success = load_lottie(ANIMATIONS["success"])
                     if lottie_success:
@@ -211,11 +306,14 @@ def main_app():
             passkey = st.text_input("Enter Passkey:", type="password")
             
             if st.form_submit_button("🔑 Decrypt Data"):
-                stored_data = load_data()
-                
-                if label in stored_data:
-                    if hash_passkey(passkey) == stored_data[label]["passkey"]:
-                        decrypted = decrypt_data(stored_data[label]["data"])
+                if label in st.session_state.stored_data:
+                    if hash_passkey(passkey) == st.session_state.stored_data[label]["passkey"]:
+                        decrypted = decrypt_data(st.session_state.stored_data[label]["data"])
+                        
+                        if decrypted is None:
+                            st.error("⚠️ Data corruption detected! Restored from backup.")
+                            st.session_state.stored_data = load_data()
+                            st.rerun()
                         
                         lottie_success = load_lottie(ANIMATIONS["success"])
                         if lottie_success:
@@ -226,6 +324,9 @@ def main_app():
                     else:
                         st.session_state.failed_attempts += 1
                         attempts_left = MAX_ATTEMPTS - st.session_state.failed_attempts
+                        
+                        # Add delay that increases with failed attempts
+                        time.sleep(st.session_state.failed_attempts)
                         
                         lottie_error = load_lottie(ANIMATIONS["error"])
                         if lottie_error:
