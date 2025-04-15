@@ -1,4 +1,3 @@
-
 # **DataVault Pro - Secure Data Encryption Solution**
 
 ![App Logo](https://cdn-icons-png.flaticon.com/512/295/295128.png)  
@@ -134,5 +133,3 @@ For questions or feedback, feel free to reach out:
 - **Streamlit**: For providing an easy-to-use framework for building data apps.
 - **Cryptography Library**: For enabling robust encryption.
 - **Lottie Animations**: For enhancing the app's visual appeal.
-
--
