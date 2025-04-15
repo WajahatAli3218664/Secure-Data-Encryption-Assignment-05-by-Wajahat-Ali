@@ -11,7 +11,7 @@ import time
 KEY_FILE = "secret.key"
 DATA_FILE = "data.json"
 MAX_ATTEMPTS = 3
-MASTER_PASS = "admin123"  # In production, use environment variables
+MASTER_PASS = os.getenv("MASTER_PASS", "admin123")  # Use environment variable in production
 
 # --- Updated Security Animations ---
 ANIMATIONS = {
@@ -59,35 +59,44 @@ def save_data(data):
 
 # --- UI Configuration ---
 st.set_page_config(
-    page_title="Secure Vault Pro",
+    page_title="VaultSecure Enterprise",
     page_icon="🔒",
-    layout="centered",
+    layout="wide",  # Use wide layout for responsiveness
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS for purple theme
+# Custom CSS for professional theme
 st.markdown("""
 <style>
     .stButton>button {
-        background-color: #9c27b0 !important;
+        background-color: #4CAF50 !important; /* Green button */
         color: white !important;
         border-radius: 8px;
-        padding: 0.5rem 1rem;
+        padding: 0.75rem 1.5rem;
         transition: all 0.3s ease;
+        font-size: 1rem;
     }
     .stButton>button:hover {
-        background-color: #7b1fa2 !important;
-        transform: scale(1.02);
+        background-color: #45a049 !important; /* Darker green on hover */
+        transform: scale(1.05);
     }
     .stTextInput>div>div>input, .stTextArea>div>div>textarea {
         border-radius: 8px !important;
-        border: 1px solid #9c27b0 !important;
+        border: 1px solid #ccc !important;
+        padding: 0.75rem !important;
     }
     .sidebar .sidebar-content {
-        background: linear-gradient(180deg, #f3e5f5, #e1bee7);
+        background: linear-gradient(180deg, #f9f9f9, #eaeaea);
     }
     .css-1d391kg {
-        padding-top: 2rem;
+        padding-top: 1rem;
+    }
+    h1, h2, h3, h4, h5, h6 {
+        color: #333 !important;
+    }
+    .stMarkdown p {
+        font-size: 1rem;
+        line-height: 1.6;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -100,8 +109,8 @@ def check_auth():
         st.session_state.failed_attempts = 0
 
 def login_page():
-    st.title("🔒 Secure Vault Pro")
-    col1, col2 = st.columns([1, 2])
+    st.title("🔒 VaultSecure Enterprise")
+    col1, col2 = st.columns([1, 2], gap="medium")  # Responsive columns
     
     with col1:
         lottie_lock = load_lottie(ANIMATIONS["lock"])
@@ -113,7 +122,7 @@ def login_page():
     with col2:
         with st.form("auth_form"):
             st.subheader("Authentication Required")
-            password = st.text_input("Master Password:", type="password")
+            password = st.text_input("Master Password:", type="password", placeholder="Enter your master password")
             
             if st.form_submit_button("Login"):
                 if password == MASTER_PASS:
@@ -142,39 +151,45 @@ def login_page():
 
 # --- Main Application ---
 def main_app():
-    st.sidebar.title("🔐 Secure Vault Pro")
+    st.sidebar.title("🔐 VaultSecure Enterprise")
     menu = ["Dashboard", "Store Data", "Retrieve Data", "Logout"]
     choice = st.sidebar.radio("Navigation", menu)
     
     if choice == "Dashboard":
         st.title("📊 Dashboard")
-        lottie_secure = load_lottie(ANIMATIONS["secure"])
-        if lottie_secure:
-            st_lottie(lottie_secure, height=200)
+        col1, col2 = st.columns([1, 2], gap="medium")  # Responsive columns
         
-        st.markdown("""
-        ### Welcome to Secure Vault Pro!
+        with col1:
+            lottie_secure = load_lottie(ANIMATIONS["secure"])
+            if lottie_secure:
+                st_lottie(lottie_secure, height=200)
+            else:
+                st.image("https://cdn-icons-png.flaticon.com/512/295/295128.png", width=150)
         
-        **Features:**
-        - Military-grade AES-256 encryption
-        - Secure password protection
-        - Tamper-proof data storage
-        - Beautiful intuitive interface
-        
-        **Instructions:**
-        1. Store data with unique labels
-        2. Retrieve with exact credentials
-        3. All data encrypted at rest
-        """)
+        with col2:
+            st.markdown("""
+            ### Welcome to VaultSecure Enterprise!
+            
+            **Features:**
+            - Military-grade AES-256 encryption
+            - Secure password protection
+            - Tamper-proof data storage
+            - Beautiful intuitive interface
+            
+            **Instructions:**
+            1. Store data with unique labels
+            2. Retrieve with exact credentials
+            3. All data encrypted at rest
+            """)
     
     elif choice == "Store Data":
         st.title("💾 Store Encrypted Data")
         
         with st.form("store_form"):
-            label = st.text_input("Data Label (e.g., 'Bank Credentials'):")
-            data = st.text_area("Sensitive Data:", height=200)
+            label = st.text_input("Data Label (e.g., 'Bank Credentials'):", placeholder="Enter a unique label")
+            data = st.text_area("Sensitive Data:", height=200, placeholder="Enter sensitive data here")
             passkey = st.text_input("Encryption Passkey:", type="password", 
-                                   help="Minimum 8 characters, include special chars")
+                                   help="Minimum 8 characters, include special chars", placeholder="Enter a strong passkey")
             
             if st.form_submit_button("🔒 Encrypt & Store"):
                 if len(label) < 3:
@@ -207,8 +222,8 @@ def main_app():
         st.title("🔍 Retrieve Encrypted Data")
         
         with st.form("retrieve_form"):
-            label = st.text_input("Enter Data Label:")
-            passkey = st.text_input("Enter Passkey:", type="password")
+            label = st.text_input("Enter Data Label:", placeholder="Enter the label used during storage")
+            passkey = st.text_input("Enter Passkey:", type="password", placeholder="Enter the passkey")
             
             if st.form_submit_button("🔑 Decrypt Data"):
                 stored_data = load_data()
