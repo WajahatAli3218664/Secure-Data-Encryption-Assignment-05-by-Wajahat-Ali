@@ -6,19 +6,22 @@ from cryptography.fernet import Fernet
 from streamlit_lottie import st_lottie
 import requests
 import time
+import re
 
 # --- Constants ---
 KEY_FILE = "secret.key"
 DATA_FILE = "data.json"
+USER_DB = "users.json"
 MAX_ATTEMPTS = 3
-MASTER_PASS = "admin123"  # In production, use environment variables
 
-# --- Updated Security Animations ---
+# --- Enhanced Security Animations ---
 ANIMATIONS = {
-    "lock": "https://assets1.lottiefiles.com/packages/lf20_hl5n0bwb.json",  # Modern lock
-    "success": "https://assets1.lottiefiles.com/packages/lf20_ok5pupu9.json",  # Shield check
-    "error": "https://assets1.lottiefiles.com/packages/lf20_gnvsa7vy.json",  # Shield cross
-    "secure": "https://assets1.lottiefiles.com/packages/lf20_q5kxy7tz.json"  # Password typing
+    "register": "https://assets1.lottiefiles.com/packages/lf20_jcikwtux.json",  # User registration animation
+    "login": "https://assets1.lottiefiles.com/packages/lf20_hu9cd9.json",  # Secure login animation
+    "success": "https://assets1.lottiefiles.com/packages/lf20_yjgbpsef.json",  # Success animation
+    "error": "https://assets1.lottiefiles.com/packages/lf20_gnvsa7vy.json",  # Error animation
+    "secure": "https://assets1.lottiefiles.com/packages/lf20_q5kxy7tz.json",  # Password typing
+    "vault": "https://assets1.lottiefiles.com/packages/lf20_5tkzkblw.json"  # Data vault animation
 }
 
 # --- Helper Functions ---
@@ -29,8 +32,8 @@ def load_lottie(url):
     except:
         return None
 
-def hash_passkey(passkey):
-    return hashlib.sha256(passkey.encode()).hexdigest()
+def hash_password(password):
+    return hashlib.sha256(password.encode()).hexdigest()
 
 def load_key():
     if not os.path.exists(KEY_FILE):
@@ -56,6 +59,29 @@ def load_data():
 def save_data(data):
     with open(DATA_FILE, "w") as f:
         json.dump(data, f, indent=4)
+
+def load_users():
+    if os.path.exists(USER_DB):
+        with open(USER_DB, "r") as f:
+            return json.load(f)
+    return {}
+
+def save_users(users):
+    with open(USER_DB, "w") as f:
+        json.dump(users, f, indent=4)
+
+def validate_password(password):
+    if len(password) < 8:
+        return False, "Password must be at least 8 characters"
+    if not re.search("[A-Z]", password):
+        return False, "Password must contain at least one uppercase letter"
+    if not re.search("[a-z]", password):
+        return False, "Password must contain at least one lowercase letter"
+    if not re.search("[0-9]", password):
+        return False, "Password must contain at least one digit"
+    if not re.search("[!@#$%^&*(),.?\":{}|<>]", password):
+        return False, "Password must contain at least one special character"
+    return True, "Password is valid"
 
 # --- UI Configuration ---
 st.set_page_config(
@@ -89,83 +115,163 @@ st.markdown("""
     .css-1d391kg {
         padding-top: 2rem;
     }
+    .success-box {
+        background-color: #e8f5e9;
+        border-radius: 10px;
+        padding: 15px;
+        margin: 10px 0;
+    }
+    .error-box {
+        background-color: #ffebee;
+        border-radius: 10px;
+        padding: 15px;
+        margin: 10px 0;
+    }
 </style>
 """, unsafe_allow_html=True)
 
-# --- Authentication ---
-def check_auth():
-    if "is_logged_in" not in st.session_state:
-        st.session_state.is_logged_in = False
-    if "failed_attempts" not in st.session_state:
-        st.session_state.failed_attempts = 0
-
-def login_page():
-    st.title("🔒 DataVault Pro - Secure Data Encryption Solution")
-    col1, col2 = st.columns([1, 2])
+# --- Authentication Functions ---
+def register_user():
+    st.title("👤 User Registration")
     
+    col1, col2 = st.columns([1, 2])
     with col1:
-        lottie_lock = load_lottie(ANIMATIONS["lock"])
-        if lottie_lock:
-            st_lottie(lottie_lock, height=200)
+        lottie_register = load_lottie(ANIMATIONS["register"])
+        if lottie_register:
+            st_lottie(lottie_register, height=200)
+        else:
+            st.image("https://cdn-icons-png.flaticon.com/512/4406/4406232.png", width=150)
+    
+    with col2:
+        with st.form("register_form"):
+            username = st.text_input("Choose a Username:")
+            email = st.text_input("Email Address:")
+            password = st.text_input("Create Password:", type="password")
+            confirm_password = st.text_input("Confirm Password:", type="password")
+            
+            if st.form_submit_button("Register"):
+                users = load_users()
+                
+                if username in users:
+                    st.error("Username already exists!")
+                    return
+                
+                if password != confirm_password:
+                    st.error("Passwords do not match!")
+                    return
+                
+                is_valid, message = validate_password(password)
+                if not is_valid:
+                    st.error(message)
+                    return
+                
+                users[username] = {
+                    "email": email,
+                    "password": hash_password(password),
+                    "created_at": time.strftime("%Y-%m-%d %H:%M:%S")
+                }
+                
+                save_users(users)
+                st.session_state.current_user = username
+                st.session_state.is_logged_in = True
+                
+                lottie_success = load_lottie(ANIMATIONS["success"])
+                if lottie_success:
+                    st_lottie(lottie_success, height=150)
+                
+                st.success("Registration successful! You are now logged in.")
+                time.sleep(2)
+                st.rerun()
+
+def login_user():
+    st.title("🔑 User Login")
+    
+    col1, col2 = st.columns([1, 2])
+    with col1:
+        lottie_login = load_lottie(ANIMATIONS["login"])
+        if lottie_login:
+            st_lottie(lottie_login, height=200)
         else:
             st.image("https://cdn-icons-png.flaticon.com/512/295/295128.png", width=150)
     
     with col2:
-        with st.form("auth_form"):
-            st.subheader("Authentication Required")
-            password = st.text_input("Master Password:", type="password")
+        with st.form("login_form"):
+            username = st.text_input("Username:")
+            password = st.text_input("Password:", type="password")
             
             if st.form_submit_button("Login"):
-                if password == MASTER_PASS:
-                    st.session_state.is_logged_in = True
-                    st.session_state.failed_attempts = 0
-                    st.success("Authentication Successful!")
-                    lottie_success = load_lottie(ANIMATIONS["success"])
-                    if lottie_success:
-                        st_lottie(lottie_success, height=150)
-                    time.sleep(1)
-                    st.rerun()
-                else:
-                    st.session_state.failed_attempts += 1
-                    attempts_left = MAX_ATTEMPTS - st.session_state.failed_attempts
+                users = load_users()
+                
+                if username not in users:
+                    st.error("Username not found!")
+                    return
+                
+                if hash_password(password) != users[username]["password"]:
+                    if "login_attempts" not in st.session_state:
+                        st.session_state.login_attempts = 0
+                    st.session_state.login_attempts += 1
+                    
+                    attempts_left = MAX_ATTEMPTS - st.session_state.login_attempts
                     
                     lottie_error = load_lottie(ANIMATIONS["error"])
                     if lottie_error:
                         st_lottie(lottie_error, height=150)
                     
-                    st.error(f"Invalid Password! Attempts left: {attempts_left}")
+                    st.error(f"Invalid password! Attempts left: {attempts_left}")
                     
-                    if st.session_state.failed_attempts >= MAX_ATTEMPTS:
-                        st.error("🚫 Account locked. Too many failed attempts.")
+                    if st.session_state.login_attempts >= MAX_ATTEMPTS:
+                        st.error("Account locked due to too many failed attempts. Please try again later.")
                         time.sleep(3)
                         st.stop()
+                    return
+                
+                st.session_state.current_user = username
+                st.session_state.is_logged_in = True
+                
+                lottie_success = load_lottie(ANIMATIONS["success"])
+                if lottie_success:
+                    st_lottie(lottie_success, height=150)
+                
+                st.success("Login successful!")
+                time.sleep(1)
+                st.rerun()
 
 # --- Main Application ---
 def main_app():
-    st.sidebar.title("🔐 DataVault Pro")
-    menu = ["Dashboard", "Store Data", "Retrieve Data", "Logout"]
+    st.sidebar.title(f"🔐 DataVault Pro")
+    st.sidebar.markdown(f"Logged in as: **{st.session_state.current_user}**")
+    
+    menu = ["Dashboard", "Store Data", "Retrieve Data", "Account Settings", "Logout"]
     choice = st.sidebar.radio("Navigation", menu)
     
     if choice == "Dashboard":
         st.title("📊 Dashboard")
-        lottie_secure = load_lottie(ANIMATIONS["secure"])
-        if lottie_secure:
-            st_lottie(lottie_secure, height=200)
         
-        st.markdown("""
-        ### Welcome to DataVault Pro!
+        col1, col2 = st.columns([1, 2])
+        with col1:
+            lottie_vault = load_lottie(ANIMATIONS["vault"])
+            if lottie_vault:
+                st_lottie(lottie_vault, height=200)
+            else:
+                st.image("https://cdn-icons-png.flaticon.com/512/2889/2889676.png", width=150)
         
-        **Features:**
-        - Military-grade AES-256 encryption
-        - Secure password protection
-        - Tamper-proof data storage
-        - Beautiful intuitive interface
-        
-        **Instructions:**
-        1. Store data with unique labels
-        2. Retrieve with exact credentials
-        3. All data encrypted at rest
-        """)
+        with col2:
+            st.markdown("""
+            ### Welcome to DataVault Pro!
+            
+            **Your Personal Secure Data Vault**
+            
+            **Features:**
+            - Military-grade AES-256 encryption
+            - Secure user authentication
+            - Tamper-proof data storage
+            - Beautiful intuitive interface
+            
+            **Instructions:**
+            1. Store sensitive data with unique labels
+            2. Retrieve with your secure passkey
+            3. All data encrypted at rest
+            """)
     
     elif choice == "Store Data":
         st.title("💾 Store Encrypted Data")
@@ -174,7 +280,7 @@ def main_app():
             label = st.text_input("Data Label (e.g., 'Bank Credentials'):")
             data = st.text_area("Sensitive Data:", height=200)
             passkey = st.text_input("Encryption Passkey:", type="password", 
-                                   help="Minimum 8 characters, include special chars")
+                                   help="Minimum 8 characters, include special characters")
             
             if st.form_submit_button("🔒 Encrypt & Store"):
                 if len(label) < 3:
@@ -186,71 +292,135 @@ def main_app():
                 else:
                     encrypted = encrypt_data(data)
                     stored_data = load_data()
-                    stored_data[label] = {
+                    
+                    if st.session_state.current_user not in stored_data:
+                        stored_data[st.session_state.current_user] = {}
+                    
+                    stored_data[st.session_state.current_user][label] = {
                         "data": encrypted,
-                        "passkey": hash_passkey(passkey),
+                        "passkey": hash_password(passkey),
                         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")
                     }
+                    
                     save_data(stored_data)
                     
                     lottie_success = load_lottie(ANIMATIONS["success"])
                     if lottie_success:
                         st_lottie(lottie_success, height=150)
                     
-                    st.success("""
-                    ✅ Data encrypted and stored securely!
-                    
-                    **Important:** Remember your passkey - it cannot be recovered!
-                    """)
+                    st.markdown("""
+                    <div class="success-box">
+                        <h3>✅ Data encrypted and stored securely!</h3>
+                        <p><b>Important:</b> Remember your passkey - it cannot be recovered!</p>
+                    </div>
+                    """, unsafe_allow_html=True)
     
     elif choice == "Retrieve Data":
         st.title("🔍 Retrieve Encrypted Data")
         
+        stored_data = load_data()
+        user_data = stored_data.get(st.session_state.current_user, {})
+        
+        if not user_data:
+            st.warning("You haven't stored any data yet.")
+            return
+        
         with st.form("retrieve_form"):
-            label = st.text_input("Enter Data Label:")
+            label = st.selectbox("Select Data Label:", options=list(user_data.keys()))
             passkey = st.text_input("Enter Passkey:", type="password")
             
             if st.form_submit_button("🔑 Decrypt Data"):
-                stored_data = load_data()
-                
-                if label in stored_data:
-                    if hash_passkey(passkey) == stored_data[label]["passkey"]:
-                        decrypted = decrypt_data(stored_data[label]["data"])
+                if label in user_data:
+                    if hash_password(passkey) == user_data[label]["passkey"]:
+                        decrypted = decrypt_data(user_data[label]["data"])
                         
                         lottie_success = load_lottie(ANIMATIONS["success"])
                         if lottie_success:
                             st_lottie(lottie_success, height=150)
                         
-                        st.success("✅ Decryption Successful!")
+                        st.markdown("""
+                        <div class="success-box">
+                            <h3>✅ Decryption Successful!</h3>
+                        </div>
+                        """, unsafe_allow_html=True)
+                        
                         st.text_area("Decrypted Content:", value=decrypted, height=200)
                     else:
-                        st.session_state.failed_attempts += 1
-                        attempts_left = MAX_ATTEMPTS - st.session_state.failed_attempts
+                        if "retrieve_attempts" not in st.session_state:
+                            st.session_state.retrieve_attempts = 0
+                        st.session_state.retrieve_attempts += 1
+                        
+                        attempts_left = MAX_ATTEMPTS - st.session_state.retrieve_attempts
                         
                         lottie_error = load_lottie(ANIMATIONS["error"])
                         if lottie_error:
                             st_lottie(lottie_error, height=150)
                         
-                        st.error(f"❌ Incorrect Passkey! Attempts left: {attempts_left}")
+                        st.markdown(f"""
+                        <div class="error-box">
+                            <h3>❌ Incorrect Passkey!</h3>
+                            <p>Attempts left: {attempts_left}</p>
+                        </div>
+                        """, unsafe_allow_html=True)
                         
-                        if st.session_state.failed_attempts >= MAX_ATTEMPTS:
-                            st.session_state.is_logged_in = False
-                            st.error("🚫 Maximum attempts reached. Logging out...")
+                        if st.session_state.retrieve_attempts >= MAX_ATTEMPTS:
+                            st.error("Maximum attempts reached. Please try again later.")
                             time.sleep(2)
-                            st.rerun()
+                            st.session_state.retrieve_attempts = 0
                 else:
-                    st.error("⚠️ No data found with that label")
+                    st.error("No data found with that label")
+    
+    elif choice == "Account Settings":
+        st.title("⚙️ Account Settings")
+        
+        users = load_users()
+        user_info = users[st.session_state.current_user]
+        
+        st.subheader("Account Information")
+        st.write(f"Username: {st.session_state.current_user}")
+        st.write(f"Email: {user_info['email']}")
+        st.write(f"Account created: {user_info['created_at']}")
+        
+        st.subheader("Change Password")
+        with st.form("change_password_form"):
+            current_password = st.text_input("Current Password:", type="password")
+            new_password = st.text_input("New Password:", type="password")
+            confirm_password = st.text_input("Confirm New Password:", type="password")
+            
+            if st.form_submit_button("Update Password"):
+                if hash_password(current_password) != user_info["password"]:
+                    st.error("Current password is incorrect")
+                elif new_password != confirm_password:
+                    st.error("New passwords don't match")
+                else:
+                    is_valid, message = validate_password(new_password)
+                    if not is_valid:
+                        st.error(message)
+                    else:
+                        users[st.session_state.current_user]["password"] = hash_password(new_password)
+                        save_users(users)
+                        st.success("Password updated successfully!")
     
     elif choice == "Logout":
         st.session_state.is_logged_in = False
+        st.session_state.current_user = None
         st.success("Logged out successfully!")
         time.sleep(1)
         st.rerun()
 
-# --- Run Application ---
-check_auth()
+# --- Initialize Session State ---
+if "is_logged_in" not in st.session_state:
+    st.session_state.is_logged_in = False
+if "current_user" not in st.session_state:
+    st.session_state.current_user = None
 
+# --- Run Application ---
 if not st.session_state.is_logged_in:
-    login_page()
+    auth_choice = st.sidebar.radio("Select Option", ["Login", "Register"])
+    
+    if auth_choice == "Login":
+        login_user()
+    else:
+        register_user()
 else:
     main_app()
